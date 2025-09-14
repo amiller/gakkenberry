@@ -1,24 +1,74 @@
 #!/usr/bin/env python3
 """
-Wireframe calibration globe using gnomonic projection
-Draws latitude/longitude grid lines for projector calibration
+Wireframe calibration globe using shared azimuthal equidistant projection
+Draws latitude/longitude grid lines for projector calibration with animation
 """
 import pygame
 import numpy as np
 import sys
 import os
+import math
 
 # Screen dimensions (from your setup)
 H, W = 720, 1280
-# Calibration scaling factors (stronger margins + mpv fine-tuning)
-CALIB_SCALE_X = 0.90  # Stronger horizontal compression for calibration match
-CALIB_SCALE_Y = 0.88  # Stronger vertical compression for calibration match
-MPV_SCALE_X = 0.984  # Fine-tuning from mpv testing (10px margin each side)
-MPV_SCALE_Y = 0.972  # Fine-tuning from mpv testing (10px margin each side)
-SCALE_X = CALIB_SCALE_X * MPV_SCALE_X  # Combined scaling
-SCALE_Y = CALIB_SCALE_Y * MPV_SCALE_Y  # Combined scaling
-EFFECTIVE_W = int(W * SCALE_X)
-EFFECTIVE_H = int(H * SCALE_Y)
+
+# Create scaled drawing functions that work at 1280x720 resolution
+def draw_azimuth_ring_polar_1280(surface, azimuth_deg, color, rotation_offset=0, num_points=200):
+    """Draw azimuth ring scaled for 1280x720 display"""
+    from projection_utils import azimuthal_equidistant_projection
+
+    points = []
+    theta = np.radians(azimuth_deg)  # great-circle angle from pole
+
+    for i in range(num_points + 1):
+        phi = 2 * np.pi * i / num_points - np.pi + rotation_offset  # azimuth around pole
+
+        # Convert to cartesian (pole toward viewer at z=1)
+        x = np.sin(theta) * np.cos(phi)
+        y = np.sin(theta) * np.sin(phi)
+        z = np.cos(theta)
+
+        # Use the projection but scale for our screen size
+        temp_x, temp_y = azimuthal_equidistant_projection(z, x, y)
+        if temp_x is not None and temp_y is not None:
+            # Scale from 640x480 to 1280x720
+            scaled_x = int(temp_x * W / 640)
+            scaled_y = int(temp_y * H / 480)
+            if 0 <= scaled_x < W and 0 <= scaled_y < H:
+                points.append((scaled_x, scaled_y))
+
+    # Draw entire polyline
+    if len(points) > 1:
+        pygame.draw.lines(surface, color, False, points, 1)
+
+def draw_longitude_line_polar_1280(surface, lon_deg, color, rotation_offset=0, num_points=144):
+    """Draw longitude line scaled for 1280x720 display"""
+    from projection_utils import azimuthal_equidistant_projection
+
+    points = []
+    phi = np.radians(lon_deg) + rotation_offset
+
+    for i in range(num_points + 1):
+        lat_deg = 90 - 180 * i / num_points  # latitude from 90 to -90
+        theta = np.radians(90 - lat_deg)     # polar angle
+
+        # Convert to cartesian (pole toward viewer)
+        x = np.sin(theta) * np.cos(phi)
+        y = np.sin(theta) * np.sin(phi)
+        z = np.cos(theta)
+
+        # Use the projection but scale for our screen size
+        temp_x, temp_y = azimuthal_equidistant_projection(z, x, y)
+        if temp_x is not None and temp_y is not None:
+            # Scale from 640x480 to 1280x720
+            scaled_x = int(temp_x * W / 640)
+            scaled_y = int(temp_y * H / 480)
+            if 0 <= scaled_x < W and 0 <= scaled_y < H:
+                points.append((scaled_x, scaled_y))
+
+    # Draw entire polyline
+    if len(points) > 1:
+        pygame.draw.lines(surface, color, False, points, 1)
 
 def gnomonic_projection():
     """Generate gnomonic projection mapping from screen to sphere"""
@@ -121,7 +171,7 @@ def main():
     else:
         screen = pygame.display.set_mode((W, H), pygame.FULLSCREEN)
 
-    pygame.display.set_caption("Wireframe Globe - Gnomonic Projection")
+    pygame.display.set_caption("Wireframe Globe - Azimuthal Equidistant Projection")
 
     # Colors
     BLACK = (0, 0, 0)
@@ -154,33 +204,16 @@ def main():
         # Clear screen
         screen.fill(BLACK)
 
-        # Draw latitude lines with equal radial spacing (like calibration reference)
-        max_radius_x = (W // 2 - 40) * SCALE_X  # Apply horizontal scale factor
-        max_radius_y = (H // 2 - 40) * SCALE_Y  # Apply vertical scale factor
-        max_radius = min(max_radius_x, max_radius_y)  # Use smaller to maintain aspect ratio
-
-        import math
-        num_rings = 6
-        for i in range(1, num_rings + 1):
-            radius = (max_radius * i) // num_rings
-
-            # Convert radius back to latitude for this projection with scale compensation
-            radius_normalized = radius / (max_radius / 2.0)  # Normalize to projection scale
-            if radius_normalized > 0:
-                colatitude = math.atan(radius_normalized)
-                lat_deg = 90 - math.degrees(colatitude)
-
-                # Draw the latitude line
-                color = RED if i == 3 else GRAY  # Highlight middle ring
-                draw_latitude_line(screen, lat_deg, color, rotation_offset, num_points=200)
-
-        # Remove debug prints since they work
-        # print(f"DEBUG: Drew {len(visible_lats)} latitude lines: {visible_lats}")
+        # Draw azimuth rings (great-circle distances from pole) using shared projection
+        calibration_azimuths = [15, 30, 45, 60, 75]  # Don't draw 90° (edge)
+        for azimuth in calibration_azimuths:
+            color = RED if azimuth == 45 else GRAY  # Highlight 45° ring
+            draw_azimuth_ring_polar_1280(screen, azimuth, color, rotation_offset, num_points=200)
 
         # Draw longitude lines (meridians) - every 15 degrees
         for lon in range(-180, 180, 15):
             color = GREEN if lon == 0 else GRAY  # Prime meridian in green
-            draw_longitude_line(screen, lon, color, rotation_offset)
+            draw_longitude_line_polar_1280(screen, lon, color, rotation_offset, num_points=144)
 
         # Draw center crosshair
         center_x, center_y = W // 2, H // 2
