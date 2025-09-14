@@ -72,14 +72,14 @@ matplotlib.use("Agg")
 
 Run matplotlib SDL example:
 ```bash
-./gakken.sh "source ~/gakken-venv/bin/activate && python mpl-sdl-example.py"
+./gakken.sh python mpl-sdl-example.py
 ```
 
 ### Direct pygame drawing (fastest)
 
 Run direct pygame drawing example:
 ```bash
-./gakken.sh "source ~/gakken-venv/bin/activate && python sdl_direct.py"
+./gakken.sh python sdl_direct.py
 ```
 
 This is much faster than matplotlib since it does direct drawing without buffer conversions.
@@ -88,7 +88,7 @@ This is much faster than matplotlib since it does direct drawing without buffer 
 
 Run animated spherical harmonics visualization:
 ```bash
-./gakken.sh "source ~/gakken-venv/bin/activate && python spherical_harmonics.py"
+./gakken.sh python spherical_harmonics.py
 ```
 
 The script displays animated spherical harmonics Y_l^m on the hemispherical display with:
@@ -101,10 +101,10 @@ The script displays animated spherical harmonics Y_l^m on the hemispherical disp
 Examples:
 ```bash
 # Default Y_2^1
-./gakken.sh "source ~/gakken-venv/bin/activate && python spherical_harmonics.py"
+./gakken.sh python spherical_harmonics.py
 
 # Y_3^2 (more complex pattern)
-./gakken.sh "source ~/gakken-venv/bin/activate && python spherical_harmonics.py l=3 m=2"
+./gakken.sh python spherical_harmonics.py l=3 m=2
 
 # Windowed mode for testing
 python spherical_harmonics.py l=2 m=1 --windowed
@@ -155,7 +155,7 @@ The scale factors (0.984, 0.972) provide fine-tuning for display margins, while 
 To generate updated calibration wireframes:
 
 ```bash
-./gakken.sh "source ~/gakken-venv/bin/activate && python generate_calibration_grids.py"
+./gakken.sh python generate_calibration_grids.py
 ```
 
 This creates both `polar_view_wireframe.png` and `standard_view_wireframe.png` using the shared projection utilities.
