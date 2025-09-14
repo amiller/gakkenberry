@@ -13,6 +13,45 @@ from scipy.special import sph_harm
 # Screen dimensions (from your setup)
 H, W = 720, 1280
 
+# Global cache for coordinate grids
+_coord_cache = {}
+
+def get_coordinate_grids_cached(H_res, W_res):
+    """Get coordinate grids, using cache if available"""
+    cache_key = (H_res, W_res)
+
+    if cache_key not in _coord_cache:
+        # Create coordinate grid
+        y_coords, x_coords = np.mgrid[0:H_res, 0:W_res]
+
+        # Convert screen coordinates to normalized coordinates [-1, 1]
+        # Scale from low-res to 640x480 coordinate system (reverse of wireframe scaling)
+        norm_x = (x_coords * 640 / W_res - 320) / 320
+        norm_y = (y_coords * 480 / H_res - 240) / 240
+
+        # Convert to spherical coordinates using inverse azimuthal equidistant projection
+        # Calculate radius from center
+        radius = np.sqrt(norm_x**2 + norm_y**2)
+
+        # In azimuthal equidistant, radius is proportional to great-circle angle
+        # Max radius corresponds to π/2 (hemisphere edge)
+        max_radius = 0.9  # Match the projection_utils.py margin
+        great_circle_angle = radius * (np.pi / 2) / max_radius
+
+        # Calculate azimuth angle
+        azimuth = np.arctan2(norm_y, norm_x)
+
+        # Mask for valid hemisphere points
+        valid_mask = (radius <= max_radius) & (great_circle_angle <= np.pi/2)
+
+        _coord_cache[cache_key] = {
+            'great_circle_angle': great_circle_angle,
+            'azimuth': azimuth,
+            'valid_mask': valid_mask
+        }
+
+    return _coord_cache[cache_key]
+
 def spherical_harmonics(l, m, theta, phi):
     """Calculate spherical harmonics Y_l^m(theta, phi)
 
@@ -66,32 +105,16 @@ def values_to_colors(values, min_val=-1, max_val=1):
 
 def create_spherical_harmonics_surface(l, m, rotation_offset=0):
     """Create a pygame surface with spherical harmonics visualization"""
-    # Create a high-resolution screen coordinate grid
-    y_coords, x_coords = np.mgrid[0:H, 0:W]
+    # Use lower resolution for faster computation (1/4 resolution = 16x fewer pixels)
+    H_low, W_low = H // 4, W // 4  # 180x320 instead of 720x1280
 
-    # Convert screen coordinates to normalized coordinates [-1, 1]
-    # Scale from 1280x720 to 640x480 coordinate system (reverse of wireframe scaling)
-    norm_x = (x_coords * 640 / W - 320) / 320
-    norm_y = (y_coords * 480 / H - 240) / 240
+    # Get cached coordinate grids
+    coords = get_coordinate_grids_cached(H_low, W_low)
 
-    # Convert to spherical coordinates using inverse azimuthal equidistant projection
-    # Calculate radius from center
-    radius = np.sqrt(norm_x**2 + norm_y**2)
-
-    # In azimuthal equidistant, radius is proportional to great-circle angle
-    # Max radius corresponds to π/2 (hemisphere edge)
-    max_radius = 0.9  # Match the projection_utils.py margin
-    great_circle_angle = radius * (np.pi / 2) / max_radius
-
-    # Calculate azimuth angle
-    azimuth = np.arctan2(norm_y, norm_x)
-
-    # Convert to spherical coordinates (theta, phi)
-    theta = great_circle_angle  # polar angle from forward direction
-    phi = azimuth + rotation_offset  # azimuthal angle with rotation
-
-    # Mask for valid hemisphere points
-    valid_mask = (radius <= max_radius) & (theta <= np.pi/2)
+    # Apply rotation to phi coordinate
+    theta = coords['great_circle_angle']  # polar angle from forward direction
+    phi = coords['azimuth'] + rotation_offset  # azimuthal angle with rotation
+    valid_mask = coords['valid_mask']
 
     # Calculate spherical harmonics values only for valid points
     Y_lm = np.zeros_like(theta, dtype=complex)
@@ -106,9 +129,12 @@ def create_spherical_harmonics_surface(l, m, rotation_offset=0):
     # Set invalid regions to black
     colors[~valid_mask] = [0, 0, 0]
 
-    # Create pygame surface from color array
-    surface = pygame.Surface((W, H))
-    pygame.surfarray.blit_array(surface, colors.swapaxes(0, 1))  # pygame expects (width, height, 3)
+    # Create low-resolution pygame surface from color array
+    low_surface = pygame.Surface((W_low, H_low))
+    pygame.surfarray.blit_array(low_surface, colors.swapaxes(0, 1))  # pygame expects (width, height, 3)
+
+    # Scale up to full resolution using pygame's transform.scale
+    surface = pygame.transform.scale(low_surface, (W, H))
 
     return surface
 

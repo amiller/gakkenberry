@@ -84,6 +84,34 @@ Run direct pygame drawing example:
 
 This is much faster than matplotlib since it does direct drawing without buffer conversions.
 
+### Spherical harmonics visualization
+
+Run animated spherical harmonics visualization:
+```bash
+./gakken.sh "source ~/gakken-venv/bin/activate && python spherical_harmonics.py"
+```
+
+The script displays animated spherical harmonics Y_l^m on the hemispherical display with:
+
+- **Parameters**: Specify degree and order with `l=2 m=1` command line arguments
+- **Colormap**: Blue (-1) to white (0) to red (+1) for harmonic values
+- **Animation**: Rotates around the vertical axis to show 3D structure
+- **Performance**: Optimized with coordinate caching and 4x resolution reduction for real-time rendering
+
+Examples:
+```bash
+# Default Y_2^1
+./gakken.sh "source ~/gakken-venv/bin/activate && python spherical_harmonics.py"
+
+# Y_3^2 (more complex pattern)
+./gakken.sh "source ~/gakken-venv/bin/activate && python spherical_harmonics.py l=3 m=2"
+
+# Windowed mode for testing
+python spherical_harmonics.py l=2 m=1 --windowed
+```
+
+The visualization uses the same azimuthal equidistant projection as the calibration wireframes, ensuring accurate mapping to the hemispherical display.
+
 ## Hemispherical Display Calibration
 
 The Gakken WorldEye is a hemispherical display using **Azimuthal Equidistant (AE) projection**, also known as "fisheye-equidistant" mapping. In this projection, radial distance on the screen is linear in great-circle angle from the viewing direction.
