@@ -1,10 +1,18 @@
 # Gakken projector controller on raspberry pi
 
+## Initial setup (Raspberry Pi)
 
+The Raspberry Pi was set up with:
+- RPi OS Lite
+- Python virtual environment with system site packages: `~/gakken-venv`
+- System packages: `mpv`, `python3-matplotlib`
+- Python packages: `pygame`, `numpy`
 
-## Configuring SSH for agents
+The HDMI resolution is 1280x720. We run without X11, using direct framebuffer access.
 
-Add this to your ~/.ssh/config so the coding agent can reuse a session
+## Setup (Control computer)
+
+Add this to your ~/.ssh/config so the coding agent can reuse a session:
 
 ```
 Host gakkenberry
@@ -15,15 +23,7 @@ Host gakkenberry
     ControlPersist yes
 ```
 
-## Gakken resolution
-
-The hdmi seems already to work well. The resolution is an unusual 1280x720, so if modetest indicates that we're on the right track.
-
-## Play videos/images with mpv
-
-We don't have x11 started, instead we just play videos directly with mpv
-
-Download a test gif:
+Download test files:
 ```bash
 curl -o earth.gif https://upload.wikimedia.org/wikipedia/commons/7/7f/Rotating_earth_animated_transparent.gif
 ```
@@ -32,9 +32,10 @@ Copy files to gakkenberry:
 ```bash
 scp earth.gif gakkenberry:~/
 scp mpl-sdl-example.py gakkenberry:~/
+scp sdl_direct.py gakkenberry:~/
 ```
 
-## Remote control script
+### Remote control script
 
 You can run commands directly via SSH:
 ```bash
@@ -47,13 +48,22 @@ ssh gakkenberry "pkill mpv"          # Kill processes remotely
 ```bash
 ./gakken.sh "mpv earth.gif"           # Run arbitrary commands
 ./gakken.sh kill-mpv                  # Kill all mpv processes
-./gakken.sh play earth.gif            # Play with 30s timeout and auto-cleanup
+./gakken.sh kill-python               # Kill all python processes
+./gakken.sh play earth.gif            # Play file with mpv
 ./gakken.sh cmd "ls -la"              # Explicit command mode
 ```
 
-## Control with matplotlib
+## Getting started
 
-We expect to use the gakken for scientific visualization with matplotlib.
+### Play videos/images with mpv
+
+```bash
+./gakken.sh play earth.gif
+```
+
+### Matplotlib visualization
+
+For scientific visualization with matplotlib, use the "Agg" backend:
 
 ```python
 import matplotlib
@@ -64,3 +74,12 @@ Run matplotlib SDL example:
 ```bash
 ./gakken.sh "source ~/gakken-venv/bin/activate && python mpl-sdl-example.py"
 ```
+
+### Direct pygame drawing (fastest)
+
+Run direct pygame drawing example:
+```bash
+./gakken.sh "source ~/gakken-venv/bin/activate && python sdl_direct.py"
+```
+
+This is much faster than matplotlib since it does direct drawing without buffer conversions.
