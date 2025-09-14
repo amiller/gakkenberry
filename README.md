@@ -83,3 +83,57 @@ Run direct pygame drawing example:
 ```
 
 This is much faster than matplotlib since it does direct drawing without buffer conversions.
+
+## Hemispherical Display Calibration
+
+The Gakken WorldEye is a hemispherical display using **Azimuthal Equidistant (AE) projection**, also known as "fisheye-equidistant" mapping. In this projection, radial distance on the screen is linear in great-circle angle from the viewing direction.
+
+### Projection System
+
+The projection utilities are implemented in `projection_utils.py` and `generate_calibration_grids.py`:
+
+- **Single projection function**: `azimuthal_equidistant_projection(x, y, z)`
+- **Clean separation**: Projection logic separate from coordinate generation
+- **Two view modes**: Polar (pole at center) and Standard (pole at top)
+
+### Calibration References
+
+Two reference frames extracted from the original Gakken WorldEye calibration video:
+
+- `polar_view_reference.png` - Frame at 48s showing pole-centered view with azimuth rings
+- `standard_view_reference.png` - Frame at 8s showing standard globe view with lat/lon grid
+
+Generated calibration wireframes (not checked in, create with `generate_calibration_grids.py`):
+
+- `polar_view_wireframe.png` - Shows azimuth rings (15°, 30°, 45°, 60°, 75°, 90° from pole)
+- `standard_view_wireframe.png` - Shows latitude/longitude grid with pole at top
+
+### Playing Calibration Images
+
+Play calibration images with the same scaling used for the original calibration video:
+
+```bash
+# Play polar view calibration
+./gakken.sh "mpv polar_view_wireframe.png --video-scale-x=0.984 --video-scale-y=0.972 --video-aspect-override=16:9 --loop=inf --no-audio --fullscreen"
+
+# Play standard view calibration
+./gakken.sh "mpv standard_view_wireframe.png --video-scale-x=0.984 --video-scale-y=0.972 --video-aspect-override=16:9 --loop=inf --no-audio --fullscreen"
+```
+
+The scale factors (0.984, 0.972) provide fine-tuning for display margins, while `--video-aspect-override=16:9` handles the 4:3 to 16:9 aspect ratio conversion.
+
+### Generating New Calibration Patterns
+
+To generate updated calibration wireframes:
+
+```bash
+./gakken.sh "source ~/gakken-venv/bin/activate && python generate_calibration_grids.py"
+```
+
+This creates both `polar_view_wireframe.png` and `standard_view_wireframe.png` using the shared projection utilities.
+
+### Key Calibration Insights
+
+- **Azimuth rings not latitude lines**: The equally-spaced rings in polar view represent great-circle distances from the pole (15°, 30°, 45°, etc.), not geographic latitude lines
+- **AE projection characteristic**: Equal spacing of azimuth rings is the key indicator of proper azimuthal equidistant projection
+- **Unified math**: Both views use the same AE projection with different 3D coordinate rotations

@@ -10,19 +10,24 @@ import os
 
 # Screen dimensions (from your setup)
 H, W = 720, 1280
-# Calibration scaling factors (10px margin each side)
-SCALE_X = 0.984  # (1280-20)/1280
-SCALE_Y = 0.972  # (720-20)/720
+# Calibration scaling factors (stronger margins + mpv fine-tuning)
+CALIB_SCALE_X = 0.90  # Stronger horizontal compression for calibration match
+CALIB_SCALE_Y = 0.88  # Stronger vertical compression for calibration match
+MPV_SCALE_X = 0.984  # Fine-tuning from mpv testing (10px margin each side)
+MPV_SCALE_Y = 0.972  # Fine-tuning from mpv testing (10px margin each side)
+SCALE_X = CALIB_SCALE_X * MPV_SCALE_X  # Combined scaling
+SCALE_Y = CALIB_SCALE_Y * MPV_SCALE_Y  # Combined scaling
 EFFECTIVE_W = int(W * SCALE_X)
 EFFECTIVE_H = int(H * SCALE_Y)
 
 def gnomonic_projection():
     """Generate gnomonic projection mapping from screen to sphere"""
-    # FOV mapping: screen coordinates to gnomonic plane (4:3 stretched to 16:9 like mpv)
-    # Start with 4:3 aspect ratio, then stretch to fill 16:9, then apply margin corrections
+    # FOV mapping: screen coordinates to gnomonic plane (doubled FOV for hemispherical display)
+    # Start with 4:3 aspect ratio, then stretch to fill 16:9, with doubled field of view
     base_aspect = 4.0/3.0  # Original calibration video aspect ratio
-    u = np.linspace(-base_aspect * SCALE_X, base_aspect * SCALE_X, W)  # 4:3 stretched wide
-    v = np.linspace(-SCALE_Y, SCALE_Y, H)  # vertical with margin correction
+    fov_scale = 2.0  # Double the field of view to match hemispherical calibration
+    u = np.linspace(-base_aspect * SCALE_X * fov_scale, base_aspect * SCALE_X * fov_scale, W)
+    v = np.linspace(-SCALE_Y * fov_scale, SCALE_Y * fov_scale, H)
     U, V = np.meshgrid(u, v)
 
     # Gnomonic projection: pixel maps to direction vector (X, Y, Z)
@@ -62,10 +67,11 @@ def sphere_to_screen(theta, phi, rotation_offset=0):
     u = y / x  # horizontal on projection plane
     v = z / x  # vertical on projection plane
 
-    # Map projection plane to screen coordinates (4:3 to 16:9 stretch)
+    # Map projection plane to screen coordinates (4:3 to 16:9 stretch, with doubled FOV)
     base_aspect = 4.0/3.0
-    screen_x = int((u / (base_aspect * SCALE_X) + 1.0) * W / 2.0)
-    screen_y = int((1.0 - v / SCALE_Y) * H / 2.0)  # flip y for screen coordinates
+    fov_scale = 2.0  # Must match the FOV scaling above
+    screen_x = int((u / (base_aspect * SCALE_X * fov_scale) + 1.0) * W / 2.0)
+    screen_y = int((1.0 - v / (SCALE_Y * fov_scale)) * H / 2.0)  # flip y for screen coordinates
 
     # Check bounds
     if 0 <= screen_x < W and 0 <= screen_y < H:
@@ -148,11 +154,25 @@ def main():
         # Clear screen
         screen.fill(BLACK)
 
-        # Draw latitude lines (parallels) - focus on the range that's actually visible
-        visible_lats = [50, 55, 60, 65, 70, 75, 80]  # Every 5° from 50° to 80°
-        for lat in visible_lats:
-            color = RED if lat == 60 else GRAY  # Highlight 60° in red
-            draw_latitude_line(screen, lat, color, rotation_offset, num_points=200)
+        # Draw latitude lines with equal radial spacing (like calibration reference)
+        max_radius_x = (W // 2 - 40) * SCALE_X  # Apply horizontal scale factor
+        max_radius_y = (H // 2 - 40) * SCALE_Y  # Apply vertical scale factor
+        max_radius = min(max_radius_x, max_radius_y)  # Use smaller to maintain aspect ratio
+
+        import math
+        num_rings = 6
+        for i in range(1, num_rings + 1):
+            radius = (max_radius * i) // num_rings
+
+            # Convert radius back to latitude for this projection with scale compensation
+            radius_normalized = radius / (max_radius / 2.0)  # Normalize to projection scale
+            if radius_normalized > 0:
+                colatitude = math.atan(radius_normalized)
+                lat_deg = 90 - math.degrees(colatitude)
+
+                # Draw the latitude line
+                color = RED if i == 3 else GRAY  # Highlight middle ring
+                draw_latitude_line(screen, lat_deg, color, rotation_offset, num_points=200)
 
         # Remove debug prints since they work
         # print(f"DEBUG: Drew {len(visible_lats)} latitude lines: {visible_lats}")
