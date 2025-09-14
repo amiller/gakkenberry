@@ -20,23 +20,23 @@ fi
 
 case "$1" in
     "kill-mpv")
-        ssh gakkenberry "pkill mpv"
+        ssh -t gakkenberry "pkill mpv"
         ;;
     "kill-python")
-        ssh gakkenberry "pkill -9 -f python"
+        ssh -t gakkenberry "pkill -9 -f python"
         ;;
     "play")
         if [ -z "$2" ]; then
             echo "Usage: $0 play <filename>"
             exit 1
         fi
-        ssh gakkenberry "mpv '$2'"
+        ssh -t gakkenberry "mpv '$2'"
         ;;
     "cmd")
         shift
-        ssh gakkenberry "$@"
+        ssh -t gakkenberry "$@"
         ;;
     *)
-        ssh gakkenberry "$@"
+        ssh -t gakkenberry "$@"
         ;;
 esac
