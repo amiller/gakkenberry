@@ -36,7 +36,13 @@ scp mpl-sdl-example.py gakkenberry:~/
 
 ## Remote control script
 
-`gakken.sh` provides convenient remote command execution on the gakkenberry:
+You can run commands directly via SSH:
+```bash
+ssh gakkenberry "mpv earth.gif"      # Direct SSH command execution
+ssh gakkenberry "pkill mpv"          # Kill processes remotely
+```
+
+`gakken.sh` is a utility wrapper that makes coding agents more comfortable with remote execution:
 
 ```bash
 ./gakken.sh "mpv earth.gif"           # Run arbitrary commands
