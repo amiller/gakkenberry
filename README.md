@@ -168,7 +168,7 @@ This creates both `polar_view_wireframe.png` and `standard_view_wireframe.png` u
 
 ## Interactive Toys
 
-The `toys/` directory contains interactive demonstrations and animations for the hemispherical display:
+The `toys/` directory contains interactive demonstrations and animations for the hemispherical display. See `toys/README.md` for full details:
 
 ### Animated Eyeball
 

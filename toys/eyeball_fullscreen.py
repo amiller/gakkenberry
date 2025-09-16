@@ -30,12 +30,17 @@ def get_fullscreen_coords_cached(decimation=4):
         # Create coordinate grids at rendering resolution
         y_coords, x_coords = np.mgrid[0:H_render, 0:W_render]
 
-        # Convert to normalized coordinates [-1, 1]
-        norm_x = (x_coords - W_render/2) / (W_render/2)
-        norm_y = (y_coords - H_render/2) / (H_render/2)
+        # Convert to normalized coordinates [-1, 1] using float32 for reduced bandwidth
+        norm_x = ((x_coords - W_render/2) / (W_render/2)).astype(np.float32)
+        norm_y = ((y_coords - H_render/2) / (H_render/2)).astype(np.float32)
 
         # Pre-calculate common distance from center (for sclera gradient)
-        center_distance = np.sqrt(norm_x**2 + norm_y**2)
+        center_distance = np.sqrt(norm_x**2 + norm_y**2, dtype=np.float32)
+
+        # Precompute sclera gradient as uint8 image once (eliminates per-frame np.clip)
+        sclera_rgb = np.array([248, 248, 255], dtype=np.float32)
+        brightness = (1.0 - 0.1 * np.clip(center_distance, 0, 1)).astype(np.float32)
+        sclera_img = (sclera_rgb * brightness[:, :, None]).astype(np.uint8)
 
         # Pre-compute eyelid masks for different blink states
         eyelid_masks = {}
@@ -53,7 +58,8 @@ def get_fullscreen_coords_cached(decimation=4):
             'center_distance': center_distance,
             'H_render': H_render,
             'W_render': W_render,
-            'eyelid_masks': eyelid_masks
+            'eyelid_masks': eyelid_masks,
+            'sclera_img': sclera_img
         }
 
     return _coord_cache[cache_key]
@@ -97,6 +103,15 @@ class FullscreenEyeballRenderer:
         # Movement timing - start with immediate movement
         self.last_movement_time = -1.0  # Negative time to trigger immediate movement
         self.movement_interval = 0.0  # Will trigger on first update
+
+        # Persistent surface (no per-frame allocations)
+        H_render = H // decimation
+        W_render = W // decimation
+        self.surface = pygame.Surface((W_render, H_render))
+
+        # Get cached coordinates and precomputed sclera
+        coords = get_fullscreen_coords_cached(decimation)
+        self.sclera_img = coords['sclera_img']
 
     def update_eye_movement(self, current_time):
         """Update eye movement with realistic saccadic motion"""
@@ -154,21 +169,27 @@ class FullscreenEyeballRenderer:
         H_render = coords['H_render']
         W_render = coords['W_render']
 
-        # Initialize with sclera color at rendering resolution
-        colors = np.full((H_render, W_render, 3), self.sclera_color, dtype=np.uint8)
-
-        # Add subtle radial gradient for sclera (using cached center_distance)
-        brightness_factor = 1.0 - 0.1 * np.clip(center_distance, 0, 1)
-        for i in range(3):
-            colors[:, :, i] = np.clip(colors[:, :, i] * brightness_factor, 0, 255).astype(np.uint8)
+        # Start from precomputed sclera image (eliminates expensive np.clip operations)
+        colors = np.copy(self.sclera_img)
 
         # Calculate iris center based on eye movement
         iris_center_x = self.eye_x
         iris_center_y = self.eye_y
 
-        # Create iris mask (elliptical) - use squared distance to avoid sqrt
-        iris_dist_x = (norm_x - iris_center_x) / self.iris_radius_x
-        iris_dist_y = (norm_y - iris_center_y) / self.iris_radius_y
+        # ROI: Calculate bounding box around iris (avoid processing full screen)
+        margin = max(self.iris_radius_x, self.iris_radius_y) * 1.2  # Add 20% margin
+        x_min = max(0, int((iris_center_x + 1) * W_render / 2 - margin * W_render / 2))
+        x_max = min(W_render, int((iris_center_x + 1) * W_render / 2 + margin * W_render / 2))
+        y_min = max(0, int((iris_center_y + 1) * H_render / 2 - margin * H_render / 2))
+        y_max = min(H_render, int((iris_center_y + 1) * H_render / 2 + margin * H_render / 2))
+
+        # Work only on ROI slices
+        roi_norm_x = norm_x[y_min:y_max, x_min:x_max]
+        roi_norm_y = norm_y[y_min:y_max, x_min:x_max]
+
+        # Create iris mask (elliptical) - only on ROI
+        iris_dist_x = (roi_norm_x - iris_center_x) / self.iris_radius_x
+        iris_dist_y = (roi_norm_y - iris_center_y) / self.iris_radius_y
         iris_distance_squared = iris_dist_x**2 + iris_dist_y**2
         iris_mask = iris_distance_squared <= 1.0
 
@@ -180,30 +201,31 @@ class FullscreenEyeballRenderer:
             radial_pattern = np.sin(iris_radius_norm * 8 * np.pi) * 0.3 + 0.7
 
             # Angular pattern relative to iris center
-            iris_azimuth = np.arctan2(norm_y[iris_mask] - iris_center_y,
-                                    norm_x[iris_mask] - iris_center_x)
+            iris_azimuth = np.arctan2(roi_norm_y[iris_mask] - iris_center_y,
+                                    roi_norm_x[iris_mask] - iris_center_x)
             angular_pattern = np.sin(iris_azimuth * 12) * 0.2 + 0.8
 
             # Combine patterns
             combined_pattern = radial_pattern * angular_pattern
 
-            # Apply iris colors
+            # Apply iris colors to ROI region
+            roi_colors = colors[y_min:y_max, x_min:x_max]
             for i in range(3):
                 base_color = self.iris_base_color[i]
                 dark_color = self.iris_dark_color[i]
                 iris_color = base_color * combined_pattern + dark_color * (1 - combined_pattern)
-                colors[iris_mask, i] = np.clip(iris_color, 0, 255).astype(np.uint8)
+                roi_colors[iris_mask, i] = np.clip(iris_color, 0, 255).astype(np.uint8)
 
-        # Create pupil mask (smaller ellipse) - use squared distance to avoid sqrt
+        # Create pupil mask (smaller ellipse) - reuse ROI
         pupil_radius_x = self.pupil_radius_x * self.pupil_scale
         pupil_radius_y = self.pupil_radius_y * self.pupil_scale
-        pupil_dist_x = (norm_x - iris_center_x) / pupil_radius_x
-        pupil_dist_y = (norm_y - iris_center_y) / pupil_radius_y
+        pupil_dist_x = (roi_norm_x - iris_center_x) / pupil_radius_x
+        pupil_dist_y = (roi_norm_y - iris_center_y) / pupil_radius_y
         pupil_distance_squared = pupil_dist_x**2 + pupil_dist_y**2
         pupil_mask = pupil_distance_squared <= 1.0
 
         if np.any(pupil_mask):
-            colors[pupil_mask] = self.pupil_color
+            roi_colors[pupil_mask] = self.pupil_color
 
         # Apply blink effect (eyelids) - using precomputed masks
         if self.blink_state > 0.0:
@@ -217,17 +239,15 @@ class FullscreenEyeballRenderer:
                 eyelid_mask = eyelid_masks[blink_index]
                 colors[eyelid_mask] = self.eyelid_color
 
-        # Create surface at rendering resolution
-        render_surface = pygame.Surface((W_render, H_render))
-        pygame.surfarray.blit_array(render_surface, colors.swapaxes(0, 1))
+        # Write pixels into the persistent surface (no new Surface allocation)
+        pygame.surfarray.blit_array(self.surface, colors.swapaxes(0, 1))
 
         # Scale up to full resolution if decimation > 1
         if self.decimation > 1:
-            surface = pygame.transform.scale(render_surface, (W, H))
+            scaled_surface = pygame.transform.scale(self.surface, (W, H))
+            return scaled_surface
         else:
-            surface = render_surface
-
-        return surface
+            return self.surface
 
 def main():
     # Parse command line arguments
