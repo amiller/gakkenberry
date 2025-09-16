@@ -35,7 +35,7 @@ case "$1" in
             echo "Usage: $0 play <filename>"
             exit 1
         fi
-        ssh -t gakkenberry "mpv '$2'"
+        ssh -t gakkenberry "mpv --video-scale-x=0.984 --video-scale-y=0.962 --video-aspect-override=16:9 $@"
         ;;
     "python")
         if [ -z "$2" ]; then

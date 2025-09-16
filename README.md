@@ -165,3 +165,54 @@ This creates both `polar_view_wireframe.png` and `standard_view_wireframe.png` u
 - **Azimuth rings not latitude lines**: The equally-spaced rings in polar view represent great-circle distances from the pole (15°, 30°, 45°, etc.), not geographic latitude lines
 - **AE projection characteristic**: Equal spacing of azimuth rings is the key indicator of proper azimuthal equidistant projection
 - **Unified math**: Both views use the same AE projection with different 3D coordinate rotations
+
+## Interactive Toys
+
+The `toys/` directory contains interactive demonstrations and animations for the hemispherical display:
+
+### Animated Eyeball
+
+A realistic 3D eyeball with interactive controls and smooth animations:
+
+```bash
+# Basic eyeball (green iris)
+./gakken.sh python toys/eyeball.py
+
+# Different eye colors
+./gakken.sh python toys/eyeball.py color=blue
+./gakken.sh python toys/eyeball.py color=brown
+./gakken.sh python toys/eyeball.py color=hazel
+./gakken.sh python toys/eyeball.py color=gray
+```
+
+**Features:**
+- **Realistic eye anatomy**: Sclera, iris with radial patterns, and dynamic pupil
+- **Eye movement**: Automatic saccadic motion and manual control with arrow keys
+- **Blinking animation**: Natural eyelid closing/opening every 3-6 seconds
+- **Interactive controls**:
+  - Arrow keys: Move eye direction
+  - Space: Trigger immediate blink
+  - R: Reset eye to center position
+  - +/-: Adjust pupil size (dilation)
+  - ESC/Q: Quit
+
+**Technical details:**
+- Uses the same azimuthal equidistant projection as calibration wireframes
+- Optimized rendering with 4x resolution reduction for real-time performance
+- Coordinate caching system for smooth 30fps animation
+- Procedural iris texture generation with radial and angular patterns
+
+### Adding New Toys
+
+Place new interactive demos in the `toys/` directory and sync with:
+
+```bash
+rsync -av toys/ gakkenberry:~/toys/
+```
+
+Toys can import shared utilities from the parent directory using:
+```python
+import sys, os
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+from projection_utils import azimuthal_equidistant_projection
+```
