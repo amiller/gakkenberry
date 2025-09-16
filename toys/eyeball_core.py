@@ -47,13 +47,26 @@ def get_coordinate_grids_cached(H_res, W_res):
         # Mask for valid hemisphere points
         valid_mask = (radius <= max_radius) & (great_circle_angle <= np.pi/2)
 
+        # Pre-compute eyelid masks for different blink states
+        eyelid_masks = {}
+        blink_steps = 20  # Number of pre-computed blink positions
+        for i in range(blink_steps + 1):
+            blink_state = i / blink_steps  # 0.0 to 1.0
+            if blink_state > 0.0:
+                blink_threshold = 0.6 * (1 - blink_state)
+                eyelid_mask = valid_mask & (
+                    (norm_y > blink_threshold) | (norm_y < -blink_threshold)
+                )
+                eyelid_masks[blink_state] = eyelid_mask
+
         _coord_cache[cache_key] = {
             'great_circle_angle': great_circle_angle,
             'azimuth': azimuth,
             'valid_mask': valid_mask,
             'radius': radius,
             'norm_x': norm_x,
-            'norm_y': norm_y
+            'norm_y': norm_y,
+            'eyelid_masks': eyelid_masks
         }
 
     return _coord_cache[cache_key]
@@ -78,8 +91,8 @@ class EyeballRenderer:
         self.target_phi = 0.0
         self.movement_speed = 0.05
         self.blink_state = 0.0  # 0 = open, 1 = closed
-        self.blink_speed = 0.2
-        self.next_blink_time = 0.0
+        self.blink_speed = 0.2  # Original blink speed
+        self.next_blink_time = 0.5  # Start with a blink at 0.5 seconds
 
         # Colors
         self.sclera_color = (248, 248, 255)  # Off-white
@@ -88,9 +101,9 @@ class EyeballRenderer:
         self.pupil_color = (0, 0, 0)         # Black
         self.eyelid_color = (205, 133, 63)   # Peru/skin color
 
-        # Movement timing
-        self.last_movement_time = 0.0
-        self.movement_interval = random.uniform(2.0, 5.0)  # Seconds between movements
+        # Movement timing - start with immediate movement
+        self.last_movement_time = -1.0  # Negative time to trigger immediate movement
+        self.movement_interval = 0.0  # Will trigger on first update
 
     def update_eye_movement(self, current_time):
         """Update eye movement with realistic saccadic motion"""
@@ -239,14 +252,14 @@ class EyeballRenderer:
         norm_y = coords['norm_y']
         valid_mask = coords['valid_mask']
 
-        # Create eyelid mask (top and bottom)
-        blink_threshold = 0.3 * (1 - self.blink_state)  # Closes from top and bottom
+        # Find closest precomputed blink state
+        blink_steps = 20
+        blink_index = round(self.blink_state * blink_steps) / blink_steps
 
-        eyelid_mask = valid_mask & (
-            (norm_y > blink_threshold) | (norm_y < -blink_threshold)
-        )
-
-        if np.any(eyelid_mask):
+        # Use precomputed eyelid mask
+        eyelid_masks = coords['eyelid_masks']
+        if blink_index in eyelid_masks:
+            eyelid_mask = eyelid_masks[blink_index]
             colors[eyelid_mask] = self.eyelid_color
 
         return colors
